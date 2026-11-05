@@ -167,7 +167,8 @@ varDecl         : typeSpecifier ID SEMICLN
                     addChild(node, $1);
                     addChild(node, maketreeWithStrVal(IDENTIFIER, $2));
                     addChild(node, maketreeWithVal(INTEGER, $4));
-                    ST_insert($2, scope, $1->val, ARRAY);
+                    int entry = ST_insert($2, scope, $1->val, ARRAY);
+                    ST_setArraySize(entry, $4);
                     $$ = node;
                  }
                 ;
@@ -245,6 +246,7 @@ formalDecl      : typeSpecifier ID
                     addChild(node, $1);
                     addChild(node, maketreeWithStrVal(IDENTIFIER, $2));
                     ST_insert($2, scope, $1->val, SCALAR);
+                    ST_addParameter(scope, $1->val, SCALAR);
                     $$ = node;
                  }
                 | typeSpecifier ID LSQ_BRKT RSQ_BRKT
@@ -253,6 +255,7 @@ formalDecl      : typeSpecifier ID
                     addChild(node, $1);
                     addChild(node, maketreeWithStrVal(IDENTIFIER, $2));
                     ST_insert($2, scope, $1->val, ARRAY);
+                    ST_addParameter(scope, $1->val, ARRAY);
                     $$ = node;
                  }
                 ;
