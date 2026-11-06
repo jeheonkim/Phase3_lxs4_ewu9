@@ -10,6 +10,9 @@ const char *symbolTypeStr[3] = {"", "[]", "()"};
   */
 struct strEntry strTable[MAXIDS];
 
+/* Phase 3: Count the semantic errors reported by the symbol table. */
+int semanticErrorCount = 0;
+
 /* Provided is a hash function that you may call to get an integer back. */
 int hash(unsigned char *str) {
   unsigned long hash = 5381;
@@ -50,8 +53,14 @@ static int symbolHash(char *id, char *scope){
 
 int ST_insert(char *id, char *scope, int data_type, int symbol_type){
 
+  /* Phase 3: Do not accept a second declaration in the same scope. */
+  if(id == NULL || scope == NULL) return -1;
+
   int index = ST_lookup(id, scope);
   if(index != -1){
+    fprintf(stderr, "error: multiply declared identifier '%s' in scope '%s'\n",
+            id, scope[0] ? scope : "global");
+    semanticErrorCount++;
     return index;
   }
 
@@ -62,6 +71,11 @@ int ST_insert(char *id, char *scope, int data_type, int symbol_type){
       strTable[index].scope = copyString(scope);
       strTable[index].data_type = data_type;
       strTable[index].symbol_type = symbol_type;
+      /* Phase 3: Initialize information for arrays and function signatures. */
+      strTable[index].array_size = -1;
+      strTable[index].param_count = 0;
+      strTable[index].param_capacity = 0;
+      strTable[index].params = NULL;
       return index;
     }
     index = (index+1) % MAXIDS;
@@ -80,29 +94,3 @@ int ST_insert(char *id, char *scope, int data_type, int symbol_type){
 }
 
 int ST_lookup(char *id, char *scope) {
-  int index = symbolHash(id,scope);
-  for(int checked = 0; checked<MAXIDS; checked++){
-    if(strTable[index].id == NULL){
-      return -1;
-    }
-    if(strcmp(strTable[index].id,id) ==0 && strcmp(strTable[index].scope,scope)==0){
-      return index;
-    }
-    index = (index+1) % MAXIDS;
-  }
-
-  /* TODO: Use the hash value to check if the index position has the "id".
-    If not, keep looking for id until you find an empty spot.
-    If you find "id", return that index.
-    If you arrive at an empty spot, that means "id" is not there.
-    Then return -1. 
-    */
-
-  return -1;
-}
-
-void output_entry(int i){
-  printf("%d: %s ", i, dataTypeStr[strTable[i].data_type]);
-  printf("%s:%s%s\n",
-    strTable[i].scope, strTable[i].id, symbolTypeStr[strTable[i].symbol_type]);
-}
