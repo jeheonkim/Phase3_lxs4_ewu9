@@ -1,85 +1,4 @@
-#include<stdio.h>
-#include<stdlib.h>
-#include<string.h>
-#include "strtab.h"
-
-const char *dataTypeStr[3] = {"int", "char", "void"};
-const char *symbolTypeStr[3] = {"", "[]", "()"};
-
-/* The symbolTable, which will be implemented as a hash table
-  */
-struct strEntry strTable[MAXIDS];
-
-/* Provided is a hash function that you may call to get an integer back. */
-int hash(unsigned char *str) {
-  unsigned long hash = 5381;
-  int c;
-  while ((c = *str++)) {
-    hash += (hash << 5) + c;
-  }
-  return hash % MAXIDS; /* MAXIDS defined in strtab.h */
-}
-
-/* Create our own copy since scanner text is reused for the next token */
-
-static char *copyString(const char *text){
-  char *copy = malloc(strlen(text)+1);
-  if(copy == NULL){
-    perror("Failed to allocate symbol-table string");
-    exit(EXIT_FAILURE);
-  }
-  strcpy(copy,text);
-  return copy;
-
-}
-
-static int symbolHash(char *id, char *scope){
-  char *key = malloc(strlen(scope)+ strlen(id)+1);
-  if(key == NULL){
-    perror("Failed to allocate symbol-table key");
-    exit (EXIT_FAILURE);
-  }
-  strcpy(key,scope);
-  strcat(key,id);
-  int index = hash((unsigned char *)key);
-  free(key);
-  return index;
-}
-
-
-
-int ST_insert(char *id, char *scope, int data_type, int symbol_type){
-
-  int index = ST_lookup(id, scope);
-  if(index != -1){
-    return index;
-  }
-
-  index = symbolHash(id,scope);
-  for(int checked = 0; checked < MAXIDS; checked++){
-    if(strTable[index].id ==NULL){
-      strTable[index].id = copyString(id);
-      strTable[index].scope = copyString(scope);
-      strTable[index].data_type = data_type;
-      strTable[index].symbol_type = symbol_type;
-      return index;
-    }
-    index = (index+1) % MAXIDS;
-  }
-  fprintf(stderr,"Error: symbol table is full\n");
-  exit(EXIT_FAILURE);
-
-  /* TODO: Use ST_lookup to check if the id is already in the symbol table.
-    If yes, ST_lookup will return an index that is not -1.
-    if index != -1, that means the variable is already in the hashtable.
-    Hence, no need to insert that variable again.
-    However, if index == -1,
-      then use linear probing to find an empty spot and insert there.
-    Then return that index.
-    */
-}
-
-int ST_lookup(char *id, char *scope) {
+  if(id == NULL || scope == NULL) return -1;
   int index = symbolHash(id,scope);
   for(int checked = 0; checked<MAXIDS; checked++){
     if(strTable[index].id == NULL){
@@ -101,8 +20,87 @@ int ST_lookup(char *id, char *scope) {
   return -1;
 }
 
+/* Phase 3: Search the function-local scope first, then global scope.
+   Keep ST_lookup unchanged because declaration checking needs exact scope.
+  */
+int ST_lookupVisible(const char *id, const char *scope){
+  if(id == NULL) return -1;
+
+  if(scope != NULL && scope[0] != '\0'){
+    int local = ST_lookup((char *)id, (char *)scope);
+    if(local != -1) return local;
+  }
+
+  return ST_lookup((char *)id, "");
+}
+
+/* Phase 3: Store a declared array size (array parameters have no size). */
+int ST_setArraySize(int entry_index, int array_size){
+  if(entry_index < 0 || entry_index >= MAXIDS ||
+     strTable[entry_index].id == NULL ||
+     strTable[entry_index].symbol_type != ARRAY)
+    return -1;
+
+  if(strTable[entry_index].array_size != -1) return -1;
+
+  strTable[entry_index].array_size = array_size;
+  return 0;
+}
+
+/* Phase 3: Append a parameter's type to a function signature. */
+int ST_addParameter(const char *function_name, int data_type, int symbol_type){
+  if(function_name == NULL ||
+     (symbol_type != SCALAR && symbol_type != ARRAY))
+    return -1;
+
+  int index = ST_lookup((char *)function_name, "");
+  if(index == -1 || strTable[index].symbol_type != FUNCTION)
+    return -1;
+
+  struct strEntry *entry = &strTable[index];
+  if(entry->param_count == entry->param_capacity){
+    int new_capacity = entry->param_capacity ? entry->param_capacity * 2 : 4;
+    struct paramInfo *grown = realloc(entry->params,
+                                (size_t)new_capacity * sizeof(*grown));
+    if(grown == NULL){
+      perror("Failed to allocate function parameter types");
+      exit(EXIT_FAILURE);
+    }
+    entry->params = grown;
+    entry->param_capacity = new_capacity;
+  }
+
+  entry->params[entry->param_count].data_type = data_type;
+  entry->params[entry->param_count].symbol_type = symbol_type;
+  entry->param_count++;
+  return 0;
+}
+
 void output_entry(int i){
+  /* Phase 3: Print array sizes and function parameter signatures. */
+  if(i < 0 || i >= MAXIDS || strTable[i].id == NULL) return;
+
   printf("%d: %s ", i, dataTypeStr[strTable[i].data_type]);
-  printf("%s:%s%s\n",
-    strTable[i].scope, strTable[i].id, symbolTypeStr[strTable[i].symbol_type]);
+  printf("%s:%s", strTable[i].scope, strTable[i].id);
+
+  if(strTable[i].symbol_type == ARRAY){
+    if(strTable[i].array_size >= 0)
+      printf("[%d]", strTable[i].array_size);
+    else
+      printf("%s", symbolTypeStr[ARRAY]);
+  }
+  else if(strTable[i].symbol_type == FUNCTION){
+    printf("(");
+    for(int p = 0; p < strTable[i].param_count; p++){
+      if(p > 0) printf(", ");
+      printf("%s", dataTypeStr[strTable[i].params[p].data_type]);
+      if(strTable[i].params[p].symbol_type == ARRAY)
+        printf("%s", symbolTypeStr[ARRAY]);
+    }
+    printf(")");
+  }
+  else{
+    printf("%s", symbolTypeStr[strTable[i].symbol_type]);
+  }
+  printf("\n");
 }
