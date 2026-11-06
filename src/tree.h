@@ -29,6 +29,9 @@ void addChild(tree *parent, tree *child);
 
 void printAst(tree *root, int nestLevel);
 
+/* Phase 3: Traverse the AST to detect undeclared variables. */
+void checkUndeclaredVars(struct treenode *root, const char *scope);
+
 /* Adds all children of sublist to list */
 void flattenList(tree *list, tree *subList);
 
