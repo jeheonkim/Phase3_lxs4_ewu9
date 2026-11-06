@@ -42,6 +42,40 @@ void addChild(tree *parent, tree *child) {
       parent->numChildren++;
 }
 
+/* Phase 3: Check whether a variable has been declared. */
+void checkVarNode(tree *node, const char *scope) {
+    if (node == NULL || node->nodeKind != VAR)
+        return;
+
+    char *name = node->children[0]->strval;
+
+    int index = ST_lookupVisible(name, scope);
+
+    if (index == -1) {
+        fprintf(stderr, "error: undeclared variable '%s'\n", name);
+        semanticErrorCount++;
+    }
+}
+/* Phase 3: Traverse the AST and check variable references. */
+void checkUndeclaredVars(tree *node, const char *scope) {
+    if (node == NULL)
+        return;
+
+    if (node->nodeKind == FUNDECL) {
+        tree *funcTypeName = node->children[0];
+        tree *identifier = funcTypeName->children[1];
+
+        scope = identifier->strval;
+    }
+
+    if (node->nodeKind == VAR) {
+        checkVarNode(node, scope);
+    }
+
+    for (int i = 0; i < node->numChildren; i++) {
+        checkUndeclaredVars(node->children[i], scope);
+    }
+}
 void printAst(tree *node, int nestLevel) {
       char* nodeName = nodeNames[node->nodeKind];
       if(strcmp(nodeName,"identifier") == 0){
