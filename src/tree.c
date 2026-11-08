@@ -19,18 +19,24 @@ char *typeNames[3] = {"int", "char", "void"};
 char *ops[10] = {"+", "-", "*", "/", "<", "<=", "==", ">=", ">", "!="};
 
 tree *maketree(int kind) {
-      tree *this = (tree *) malloc(sizeof(struct treenode));
+      tree *this = (tree *) calloc(1, sizeof(struct treenode));
       this->nodeKind = kind;
       this->numChildren = 0;
       return this;
 }
 
 tree *maketreeWithVal(int kind, int val) {
-      tree *this = (tree *) malloc(sizeof(struct treenode));
+      tree *this = (tree *) calloc(1, sizeof(struct treenode));
       this->nodeKind = kind;
       this->numChildren = 0;
       this->val = val;
       return this;
+}
+
+tree *maketreeWithStrVal(int kind, const char *value) {
+    tree *node = maketree(kind);
+    node->strval = strdup(value);
+    return node;
 }
 
 void addChild(tree *parent, tree *child) {
@@ -42,44 +48,12 @@ void addChild(tree *parent, tree *child) {
       parent->numChildren++;
 }
 
-/* Phase 3: Check whether a variable has been declared. */
-void checkVarNode(tree *node, const char *scope) {
-    if (node == NULL || node->nodeKind != VAR)
-        return;
-
-    char *name = node->children[0]->strval;
-
-    int index = ST_lookupVisible(name, scope);
-
-    if (index == -1) {
-        fprintf(stderr, "error: undeclared variable '%s'\n", name);
-        semanticErrorCount++;
-    }
-}
-/* Phase 3: Traverse the AST and check variable references. */
-void checkUndeclaredVars(tree *node, const char *scope) {
-    if (node == NULL)
-        return;
-
-    if (node->nodeKind == FUNDECL) {
-        tree *funcTypeName = node->children[0];
-        tree *identifier = funcTypeName->children[1];
-
-        scope = identifier->strval;
-    }
-
-    if (node->nodeKind == VAR) {
-        checkVarNode(node, scope);
-    }
-
-    for (int i = 0; i < node->numChildren; i++) {
-        checkUndeclaredVars(node->children[i], scope);
-    }
-}
 void printAst(tree *node, int nestLevel) {
       char* nodeName = nodeNames[node->nodeKind];
       if(strcmp(nodeName,"identifier") == 0){
-          if(node->val == -1)
+          if(node->strval)
+              printf("%s,%s\n", nodeName, node->strval);
+          else if(node->val == -1)
               printf("%s,%s\n", nodeName,"undeclared variable");
           else
               printf("%s,%s\n", nodeName,get_symbol_id(node->val));
@@ -115,4 +89,3 @@ void flattenList(tree *list, tree *subList){
         addChild(list,getChild(subList,i));
     }
 }
-

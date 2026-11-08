@@ -1,0 +1,33 @@
+1. Name and course ID
+    Malachi Pena (ewu9), Jeheon Kim (lxs4)
+    CS 4318, Section 001, Fall 2026
+
+2. Group members and contributions
+   [Fill in the group members and their actual contributions.]
+
+3. Additional tests
+
+   Example 1: Local variable shadows a global variable
+
+       int x;
+       int main() {
+           char x;
+           x = 'a';
+           return 0;
+       }
+   Expected output: Pass
+   This case tests the local char x shadowing the global int x. The assignment will use the
+   local variable and produce neither a duplicate declaration nor a type error.
+
+   Example 2: Constant expression outside array bounds
+
+       int main() {
+           int a[2];
+           a[1 + 1] = 0;
+           return 0;
+       }
+
+   Expected output:
+       error: line 3: Statically sized array indexed with constant, out-of-bounds expression.
+       Compilation finished.
+   This cases tests the catching of array out-of-bounds error. At line 3, the analyzer detects the rule 4 error.
