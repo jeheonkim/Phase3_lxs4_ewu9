@@ -3,7 +3,7 @@
     CS 4318, Section 001, Fall 2026
 
 2. Group members and contributions
-   [Fill in the group members and their actual contributions.]
+   I Jeheon Kim worked on the adaptation of Phase 2 files into Phase 3 for semantic analysis, and the implementation of functions in strtab.c&h.
 
 3. Additional tests
 
