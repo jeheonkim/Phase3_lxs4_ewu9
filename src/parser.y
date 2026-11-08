@@ -39,6 +39,72 @@ extern tree *ast;
     we are okay with it.
   */
 char* scope = "";
+static int valid_function = 0;
+static int duplicate_scope = 0;
+
+static void diagnostic(const char *message) { printf("error: line %d: %s\n", yylineno, message); }
+static int declare_symbol(char *id, int type, int kind) {
+    int i = ST_insert(id, scope, type, kind);
+    if (i < 0) diagnostic("Symbol declared multiple times.");
+    return i;
+}
+/* -1 means an earlier error; -2 is a mixed expression. */
+static int expr_type(tree *n) {
+    if (!n) return -1;
+    if (n->nodeKind == INTEGER) return INT_TYPE;
+    if (n->nodeKind == CHAR) return CHAR_TYPE;
+    if (n->nodeKind == VAR || n->nodeKind == FUNCCALLEXPR) {
+        int i = n->val; return i < 0 ? -1 : strTable[i].data_type;
+    }
+    if (n->numChildren == 1) return expr_type(n->children[0]);
+    if (n->numChildren == 3) {
+        int a=expr_type(n->children[0]), b=expr_type(n->children[2]);
+        if (a == -1 || b == -1) return -1;
+        return a == b && a != VOID_TYPE ? a : -2;
+    }
+    return -1;
+}
+static int expression_shape(tree *n) {
+    while (n && n->numChildren == 1 && n->nodeKind != VAR && n->nodeKind != FUNCCALLEXPR) n=n->children[0];
+    return n && n->nodeKind == VAR && n->numChildren == 1 && n->val >= 0 && strTable[n->val].symbol_type == ARRAY ? ARRAY : SCALAR;
+}
+static int constant_value(tree *n, long long *out) {
+    if (!n) return 0;
+    if (n->nodeKind == INTEGER) { *out=n->val; return 1; }
+    if (n->numChildren == 1) return constant_value(n->children[0],out);
+    if (n->numChildren == 3 && (n->nodeKind == ADDEXPR || n->nodeKind == TERM)) {
+        long long a,b; if (!constant_value(n->children[0],&a) || !constant_value(n->children[2],&b)) return 0;
+        switch (n->children[1]->val) {
+        case ADD: *out=a+b; break; case SUB: *out=a-b; break;
+        case MUL: *out=a*b; break; case DIV: if (!b) return 0; *out=a/b; break; default: return 0;
+        } return 1;
+    } return 0;
+}
+static void check_args(tree *args, struct strEntry *fn, int *position, int *bad) {
+    if (!args) return;
+    if (args->nodeKind == ARGLIST) { for(int i=0;i<args->numChildren;i++) check_args(args->children[i],fn,position,bad); return; }
+    int p=(*position)++; int t=expr_type(args);
+    if (p < fn->param_count && t != -1 && (t != fn->params[p].data_type)) *bad=1;
+}
+static void check_call(tree *node, tree *args, const char *name) {
+    int i=ST_lookupVisible(name,scope); node->val=i;
+    if (i < 0 || strTable[i].symbol_type != FUNCTION) { diagnostic("Undefined function"); node->val=-1; return; }
+    int count=0,bad=0; check_args(args,&strTable[i],&count,&bad);
+    if(count < strTable[i].param_count) diagnostic("Too few arguments provided in function call.");
+    else if(count > strTable[i].param_count) diagnostic("Too many arguments provided in function call.");
+    else if(bad) diagnostic("Argument type mismatch in function call.");
+}
+static void check_var(tree *node, const char *name, tree *index) {
+    int i=ST_lookupVisible(name,scope); node->val=i;
+    if(i < 0 || strTable[i].symbol_type == FUNCTION) { diagnostic("Undeclared variable"); node->val=-1; return; }
+    if(index) {
+        if(strTable[i].symbol_type != ARRAY) diagnostic("Non-array identifier used as an array.");
+        else { int t=expr_type(index); long long v;
+            if(t != -1 && t != INT_TYPE) diagnostic("Array indexed using non-integer expression.");
+            else if(t == INT_TYPE && strTable[i].array_size >= 0 && constant_value(index,&v) && (v < 0 || v >= strTable[i].array_size)) diagnostic("Statically sized array indexed with constant, out-of-bounds expression.");
+        }
+    }
+}
 %}
 
 /* the union describes the fields available in the yylval variable */
@@ -75,7 +141,7 @@ char* scope = "";
 %token OPER_MOD OPER_AT OPER_INC OPER_DEC
 %token OPER_AND OPER_OR OPER_NOT
 
-%token ERROR
+%token ERROR ILLEGAL_TOK
 
 
 /* TODO: Declare non-terminal symbols as of type node.
@@ -158,7 +224,7 @@ varDecl         : typeSpecifier ID SEMICLN
                     tree *node = maketree(VARDECL);
                     addChild(node, $1);
                     addChild(node, maketreeWithStrVal(IDENTIFIER, $2));
-                    ST_insert($2, scope, $1->val, SCALAR);
+                    declare_symbol($2, $1->val, SCALAR);
                     $$ = node;
                  }
                 | typeSpecifier ID LSQ_BRKT INTCONST RSQ_BRKT SEMICLN
@@ -167,7 +233,8 @@ varDecl         : typeSpecifier ID SEMICLN
                     addChild(node, $1);
                     addChild(node, maketreeWithStrVal(IDENTIFIER, $2));
                     addChild(node, maketreeWithVal(INTEGER, $4));
-                    int entry = ST_insert($2, scope, $1->val, ARRAY);
+                    int entry = declare_symbol($2, $1->val, ARRAY);
+                    if ($4 == 0) diagnostic("Array variable declared with size of zero.");
                     ST_setArraySize(entry, $4);
                     $$ = node;
                  }
@@ -196,10 +263,16 @@ funcTypeName    : typeSpecifier ID LPAREN
                     addChild(node, nameNode);
 
                     /* Register the function in global scope. */
-                    ST_insert($2, "", $1->val, FUNCTION);
+                    int function_index = declare_symbol($2, $1->val, FUNCTION);
+                    valid_function = function_index >= 0;
 
-                    /* Enter its scope before parsing parameters/body. */
-                    scope = nameNode->strval;
+                    /* A duplicate function gets an isolated local scope. */
+                    if (valid_function) scope = nameNode->strval;
+                    else {
+                        char temp[64];
+                        snprintf(temp, sizeof(temp), "#duplicate%d", ++duplicate_scope);
+                        scope = strdup(temp);
+                    }
 
                     $$ = node;
                  }
@@ -211,7 +284,7 @@ funDecl         : funcTypeName formalDeclList RPAREN funBody
                     addChild(node, $2);
                     addChild(node, $4);
 
-                  
+
                     scope = "";
                     $$ = node;
                  }
@@ -221,7 +294,7 @@ funDecl         : funcTypeName formalDeclList RPAREN funBody
                     addChild(node, $1);
                     addChild(node, $3);
 
-                  
+
                     scope = "";
                     $$ = node;
                  }
@@ -245,8 +318,8 @@ formalDecl      : typeSpecifier ID
                     tree *node = maketree(FORMALDECL);
                     addChild(node, $1);
                     addChild(node, maketreeWithStrVal(IDENTIFIER, $2));
-                    ST_insert($2, scope, $1->val, SCALAR);
-                    ST_addParameter(scope, $1->val, SCALAR);
+                    declare_symbol($2, $1->val, SCALAR);
+                    if (valid_function) ST_addParameter(scope, $1->val, SCALAR);
                     $$ = node;
                  }
                 | typeSpecifier ID LSQ_BRKT RSQ_BRKT
@@ -254,8 +327,8 @@ formalDecl      : typeSpecifier ID
                     tree *node = maketree(FORMALDECL);
                     addChild(node, $1);
                     addChild(node, maketreeWithStrVal(IDENTIFIER, $2));
-                    ST_insert($2, scope, $1->val, ARRAY);
-                    ST_addParameter(scope, $1->val, ARRAY);
+                    declare_symbol($2, $1->val, ARRAY);
+                    if (valid_function) ST_addParameter(scope, $1->val, ARRAY);
                     $$ = node;
                  }
                 ;
@@ -333,6 +406,9 @@ assignStmt     : var OPER_ASGN expression SEMICLN
                     tree *node = maketree(ASSIGNSTMT);
                     addChild(node, $1);
                     addChild(node, $3);
+                    int lhs = expr_type($1), rhs = expr_type($3);
+                    if (lhs != -1 && rhs != -1 && (lhs != rhs || expression_shape($1) != expression_shape($3)))
+                        diagnostic("Type mismatch in assignment.");
                     $$ = node;
                  }
                 | expression SEMICLN
@@ -385,7 +461,7 @@ var            : ID
                  {
                     tree *node = maketree(VAR);
                     addChild(node, maketreeWithStrVal(IDENTIFIER, $1));
-                    ST_lookup($1, scope);
+                    check_var(node, $1, NULL);
                     $$ = node;
                  }
                 | ID LSQ_BRKT addExpr RSQ_BRKT
@@ -393,7 +469,7 @@ var            : ID
                     tree *node = maketree(VAR);
                     addChild(node, maketreeWithStrVal(IDENTIFIER, $1));
                     addChild(node, $3);
-                    ST_lookup($1, scope);
+                    check_var(node, $1, $3);
                     $$ = node;
                  }
                 ;
@@ -529,14 +605,14 @@ funCallExpr    : ID LPAREN argList RPAREN
                     tree *node = maketree(FUNCCALLEXPR);
                     addChild(node, maketreeWithStrVal(IDENTIFIER, $1));
                     addChild(node, $3);
-                    ST_lookup($1, scope);
+                    check_call(node, $3, $1);
                     $$ = node;
                  }
                 | ID LPAREN RPAREN
                  {
                     tree *node = maketree(FUNCCALLEXPR);
                     addChild(node, maketreeWithStrVal(IDENTIFIER, $1));
-                    ST_lookup($1, scope);
+                    check_call(node, NULL, $1);
                     $$ = node;
                  }
                 ;

@@ -19,7 +19,7 @@ int processChar();
 %}
 
 newline         \n
-whitespace      [ \t]+
+whitespace      [ \t\r]+
 integer         0|[1-9][0-9]*
 integerlead0    0[0-9]+
 character       \'([^\']|\\[\\nt\'])\'

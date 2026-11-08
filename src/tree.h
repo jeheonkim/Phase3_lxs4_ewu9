@@ -3,10 +3,15 @@
 
 #define MAXCHILDREN 100
 
+enum nodeKind { PROGRAM, DECLLIST, DECL, VARDECL, TYPESPEC, FUNDECL, FORMALDECLLIST, FORMALDECL, FUNBODY, LOCALDECLLIST, STATEMENTLIST, STATEMENT, COMPOUNDSTMT, ASSIGNSTMT, CONDSTMT, LOOPSTMT, RETURNSTMT, EXPRESSION, RELOP, ADDEXPR, ADDOP, TERM, MULOP, FACTOR, FUNCCALLEXPR, ARGLIST, INTEGER, IDENTIFIER, VAR, ARRAYDECL, CHAR, FUNCTYPENAME };
+enum operatorKind { ADD, SUB, MUL, DIV, LT, LTE, EQ, GTE, GT, NEQ };
+
 typedef struct treenode tree;
 
 /* tree node - you may want to add more fields */
 struct treenode {
+      char *strval;
+      int line;
       int nodeKind;
       int numChildren;
       int val;
@@ -24,6 +29,7 @@ tree *maketree(int kind);
 
 /* builds sub tree with leaf node */
 tree *maketreeWithVal(int kind, int val);
+tree *maketreeWithStrVal(int kind, const char *value);
 
 void addChild(tree *parent, tree *child);
 

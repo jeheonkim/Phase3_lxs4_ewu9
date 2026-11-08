@@ -1,25 +1,46 @@
-  if(id == NULL || scope == NULL) return -1;
-  int index = symbolHash(id,scope);
-  for(int checked = 0; checked<MAXIDS; checked++){
-    if(strTable[index].id == NULL){
-      return -1;
-    }
-    if(strcmp(strTable[index].id,id) ==0 && strcmp(strTable[index].scope,scope)==0){
-      return index;
-    }
-    index = (index+1) % MAXIDS;
-  }
+#include "strtab.h"
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 
-  /* TODO: Use the hash value to check if the index position has the "id".
-    If not, keep looking for id until you find an empty spot.
-    If you find "id", return that index.
-    If you arrive at an empty spot, that means "id" is not there.
-    Then return -1. 
-    */
+struct strEntry strTable[MAXIDS];
+int semanticErrorCount = 0;
+static const char *dataTypeStr[] = {"int", "char", "void"};
+static const char *symbolTypeStr[] = {"", "[]", "()"};
 
-  return -1;
+static unsigned symbolHash(const char *id, const char *scope) {
+    unsigned long hash = 5381;
+    while (*scope) hash = hash * 33 + (unsigned char)*scope++;
+    while (*id) hash = hash * 33 + (unsigned char)*id++;
+    return (unsigned)(hash % MAXIDS);
 }
-
+int ST_lookup(char *id, char *scope) {
+    if (!id || !scope) return -1;
+    unsigned index = symbolHash(id, scope);
+    for (int i = 0; i < MAXIDS; i++, index = (index + 1) % MAXIDS) {
+        if (!strTable[index].id) return -1;
+        if (!strcmp(strTable[index].id, id) && !strcmp(strTable[index].scope, scope)) return (int)index;
+    }
+    return -1;
+}
+int ST_insert(char *id, char *scope, int data_type, int symbol_type) {
+    if (ST_lookup(id, scope) != -1) return -1;
+    unsigned index = symbolHash(id, scope);
+    for (int i = 0; i < MAXIDS; i++, index = (index + 1) % MAXIDS) {
+        if (!strTable[index].id) {
+            strTable[index].id = strdup(id); strTable[index].scope = strdup(scope);
+            strTable[index].data_type = data_type; strTable[index].symbol_type = symbol_type;
+            strTable[index].array_size = -1; return (int)index;
+        }
+    }
+    fprintf(stderr, "symbol table full\n"); exit(EXIT_FAILURE);
+}
+const char *get_symbol_id(int index) {
+    return index >= 0 && index < MAXIDS && strTable[index].id ? strTable[index].id : "unknown";
+}
+void print_sym_tab(void) {
+    for (int i = 0; i < MAXIDS; i++) if (strTable[i].id) output_entry(i);
+}
 /* Phase 3: Search the function-local scope first, then global scope.
    Keep ST_lookup unchanged because declaration checking needs exact scope.
   */

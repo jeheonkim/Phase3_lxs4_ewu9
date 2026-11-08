@@ -73,5 +73,7 @@ int ST_addParameter(const char *function_name, int data_type, int symbol_type);
 
 /* Print the i-th symbol table entry. You may not need this function. */
 void output_entry(int i);
+const char *get_symbol_id(int index);
+void print_sym_tab(void);
 
 #endif
