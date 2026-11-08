@@ -4,6 +4,8 @@
 
 2. Group members and contributions
    I Jeheon Kim worked on the adaptation of Phase 2 files into Phase 3 for semantic analysis, and the implementation of functions in strtab.c&h.
+   I Malachi Pena worked on small adaptations for scanner.l, along with making corrections and adding node definitions and AST constructors for tree.h and tree.c.
+
 
 3. Additional tests
 
