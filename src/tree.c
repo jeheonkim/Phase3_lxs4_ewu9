@@ -18,6 +18,7 @@ tree *ast = NULL;   /* the AST root; declared extern in tree.h */
 char *typeNames[3] = {"int", "char", "void"};
 char *ops[10] = {"+", "-", "*", "/", "<", "<=", "==", ">=", ">", "!="};
 
+/* Changed to calloc so all node fields start at zero instead of containing uninitialized values. */
 tree *maketree(int kind) {
       tree *this = (tree *) calloc(1, sizeof(struct treenode));
       this->nodeKind = kind;
@@ -33,6 +34,7 @@ tree *maketreeWithVal(int kind, int val) {
       return this;
 }
 
+/* Added to create AST nodes that store their own copy of an identifier's name. */
 tree *maketreeWithStrVal(int kind, const char *value) {
     tree *node = maketree(kind);
     node->strval = strdup(value);
