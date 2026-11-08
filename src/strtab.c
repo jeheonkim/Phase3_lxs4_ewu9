@@ -1,19 +1,24 @@
+/*Added missing definitions and removed initial fragmented code*/
 #include "strtab.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
+/* Added missing symbol table storage, error counter, and labels for printing entries. */
 struct strEntry strTable[MAXIDS];
 int semanticErrorCount = 0;
 static const char *dataTypeStr[] = {"int", "char", "void"};
 static const char *symbolTypeStr[] = {"", "[]", "()"};
 
+/* Added the missing hash helper to choose a table slot using the identifier and scope. */
 static unsigned symbolHash(const char *id, const char *scope) {
     unsigned long hash = 5381;
     while (*scope) hash = hash * 33 + (unsigned char)*scope++;
     while (*id) hash = hash * 33 + (unsigned char)*id++;
     return (unsigned)(hash % MAXIDS);
 }
+
+/* Restored the lookup function to find identifiers in the specified scope and handle hash collisions. */
 int ST_lookup(char *id, char *scope) {
     if (!id || !scope) return -1;
     unsigned index = symbolHash(id, scope);
@@ -23,6 +28,8 @@ int ST_lookup(char *id, char *scope) {
     }
     return -1;
 }
+
+/* Changed to reject same-scope duplicates and initialize array_size to -1 for new symbols. */
 int ST_insert(char *id, char *scope, int data_type, int symbol_type) {
     if (ST_lookup(id, scope) != -1) return -1;
     unsigned index = symbolHash(id, scope);

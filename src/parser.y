@@ -42,6 +42,11 @@ char* scope = "";
 static int valid_function = 0;
 static int duplicate_scope = 0;
 
+/*
+ * Adds an identifier to the symbol table in the current scope.
+ * Reports an error if ST_insert returns a negative value.
+ * Returns the symbol table index, or the negative value on failure.
+ */
 static void diagnostic(const char *message) { printf("error: line %d: %s\n", yylineno, message); }
 static int declare_symbol(char *id, int type, int kind) {
     int i = ST_insert(id, scope, type, kind);
@@ -68,6 +73,13 @@ static int expression_shape(tree *n) {
     while (n && n->numChildren == 1 && n->nodeKind != VAR && n->nodeKind != FUNCCALLEXPR) n=n->children[0];
     return n && n->nodeKind == VAR && n->numChildren == 1 && n->val >= 0 && strTable[n->val].symbol_type == ARRAY ? ARRAY : SCALAR;
 }
+
+/*
+ * Recursively evaluates integer constant expressions in the AST.
+ * Stores the result in *out and returns 1 if successful.
+ * Returns 0 if the expression cannot be evaluated, uses an
+ * unsupported operation, or attempts to divide by zero.
+ */
 static int constant_value(tree *n, long long *out) {
     if (!n) return 0;
     if (n->nodeKind == INTEGER) { *out=n->val; return 1; }
@@ -80,12 +92,24 @@ static int constant_value(tree *n, long long *out) {
         } return 1;
     } return 0;
 }
+
+/*
+ * Recursively walks the argument list and counts arguments using *position.
+ * Sets *bad to 1 when an argument's known data type does not match
+ * the corresponding function parameter's data type.
+ */
 static void check_args(tree *args, struct strEntry *fn, int *position, int *bad) {
     if (!args) return;
     if (args->nodeKind == ARGLIST) { for(int i=0;i<args->numChildren;i++) check_args(args->children[i],fn,position,bad); return; }
     int p=(*position)++; int t=expr_type(args);
     if (p < fn->param_count && t != -1 && (t != fn->params[p].data_type)) *bad=1;
 }
+
+/*
+ * Looks up the function and stores its symbol table index in the node.
+ * Reports an error if the name does not refer to a declared function
+ * or if the argument count or types do not match its parameters.
+ */
 static void check_call(tree *node, tree *args, const char *name) {
     int i=ST_lookupVisible(name,scope); node->val=i;
     if (i < 0 || strTable[i].symbol_type != FUNCTION) { diagnostic("Undefined function"); node->val=-1; return; }
@@ -94,6 +118,8 @@ static void check_call(tree *node, tree *args, const char *name) {
     else if(count > strTable[i].param_count) diagnostic("Too many arguments provided in function call.");
     else if(bad) diagnostic("Argument type mismatch in function call.");
 }
+
+/* Resolves a variable and checks array indexing, index types, and constant bounds. */
 static void check_var(tree *node, const char *name, tree *index) {
     int i=ST_lookupVisible(name,scope); node->val=i;
     if(i < 0 || strTable[i].symbol_type == FUNCTION) { diagnostic("Undeclared variable"); node->val=-1; return; }
@@ -141,6 +167,7 @@ static void check_var(tree *node, const char *name, tree *index) {
 %token OPER_MOD OPER_AT OPER_INC OPER_DEC
 %token OPER_AND OPER_OR OPER_NOT
 
+/* Declares the error tokens returned by the scanner. */
 %token ERROR ILLEGAL_TOK
 
 
